@@ -3,9 +3,7 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (req.method === 'POST') {
         const { phoneNumber } = req.body;
@@ -18,8 +16,8 @@ module.exports = async (req, res) => {
             const RAPID_API_KEY = "4f113199efmsh82b0825b662cfa5p10d578jsn944a0e3ea3a8";
             const RAPID_API_HOST = "truecaller4.p.rapidapi.com";
 
-            // 🔥 SABSE BADA FIX: Number ke aage +91 lagana zaroori hai (%2B = + in URL)
-            const url = `https://${RAPID_API_HOST}/api/v1/getDetails?phone=%2B91${phoneNumber}&countryCode=IN`;
+            // 🔥 BADA FIX: Wapas wahi URL laga diya jo tumhare pehle screenshot mein tha
+            const url = `https://${RAPID_API_HOST}/api/v1/search?phone=91${phoneNumber}`;
             
             const apiResponse = await fetch(url, {
                 method: 'GET',
@@ -30,33 +28,33 @@ module.exports = async (req, res) => {
             });
             
             const data = await apiResponse.json();
-            
-            // 🚨 Naya Feature: Agar API Key ki free limit khatam ho gayi hai toh saaf batayega
-            if (data.message && data.message.toLowerCase().includes("exceeded")) {
-                return res.status(200).json({ success: false, message: "API Limit Exhausted. Please use a new RapidAPI key." });
-            }
-            if (data.message && data.message.toLowerCase().includes("unauthorized")) {
-                return res.status(200).json({ success: false, message: "Invalid RapidAPI Key." });
+
+            // 🚨 X-RAY DEBUGGER: Agar API key expire ho gayi ya limit khatam hui, toh direct popup mein dikhega!
+            if (data.message) {
+                return res.status(200).json({ 
+                    success: false, 
+                    message: `RapidAPI Error: ${data.message}` 
+                });
             }
 
             let userName = null;
             let userCarrier = null;
             let userCircle = null;
 
-            // Har format ko parse karne ka solid logic
+            // Data padhne ka format
             const searchData = data.data || data; 
             
             if (Array.isArray(searchData) && searchData.length > 0) {
                 userName = searchData[0].name;
-                userCarrier = searchData[0].phones?.[0]?.carrier;
-                userCircle = searchData[0].addresses?.[0]?.city;
+                userCarrier = searchData[0].phones?.[0]?.carrier || searchData[0].carrier;
+                userCircle = searchData[0].addresses?.[0]?.city || searchData[0].circle;
             } else if (searchData.name) {
                 userName = searchData.name;
                 userCarrier = searchData.carrier || searchData.phones?.[0]?.carrier;
                 userCircle = searchData.circle || searchData.city || searchData.addresses?.[0]?.city;
             }
 
-            // Agar asli naam mil gaya (Sirf tabhi green tick aayega)
+            // Agar asli naam mil gaya
             if (userName && userName.trim() !== "") {
                 return res.status(200).json({
                     success: true,
@@ -65,16 +63,16 @@ module.exports = async (req, res) => {
                     circle: userCircle || "Not Found"
                 });
             } else {
-                // Agar number wakai mein fake hai
+                // Agar number wakai mein fake hai ya RapidAPI ne data nahi diya
                 return res.status(200).json({ 
                     success: false, 
-                    message: "This number does not exist or is invalid." 
+                    // Yeh code tumhe RapidAPI ka kachha data dikha dega taaki pata chale error kya hai
+                    message: "Fake Number ya No Data. API Response: " + JSON.stringify(data).substring(0, 50) 
                 });
             }
 
         } catch (error) {
-            console.error("API Error:", error);
-            return res.status(500).json({ success: false, message: "Server connection failed." });
+            return res.status(200).json({ success: false, message: "Server connection failed: " + error.message });
         }
     } else {
         return res.status(405).json({ success: false, message: "Only POST allowed" });
