@@ -1,5 +1,5 @@
 module.exports = async (req, res) => {
-    // CORS: Tumhari website ko backend se connect hone ki permission
+    // CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -16,11 +16,12 @@ module.exports = async (req, res) => {
         }
 
         try {
-            // 4f113199efmsh82b0825b662cfa5p10d578jsn944a0e3ea3a8
+            // Tumhari RapidAPI Key aur Host
             const RAPID_API_KEY = "4f113199efmsh82b0825b662cfa5p10d578jsn944a0e3ea3a8";
-            const RAPID_API_HOST = "truecaller4.p.rapidapi.com"; // RapidAPI par check kar lena ki host kya hai
+            const RAPID_API_HOST = "truecaller4.p.rapidapi.com";
 
-            const url = `https://${RAPID_API_HOST}/api/v1/search?phone=91${phoneNumber}`;
+            // 🔥 Fix: URL theek kar diya gaya hai ('search' se 'getDetails')
+            const url = `https://${RAPID_API_HOST}/api/v1/getDetails?phone=${phoneNumber}&countryCode=IN`;
             
             const options = {
                 method: 'GET',
@@ -33,17 +34,38 @@ module.exports = async (req, res) => {
             const apiResponse = await fetch(url, options);
             const data = await apiResponse.json();
             
-            // Truecaller ka data match karke bhejna
-            if (data && data.status === "success") {
+            // Smart Parser (Truecaller data pakadne ke liye)
+            let userName = null;
+            let userCarrier = null;
+            let userCircle = null;
+
+            if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                userName = data.data[0].name;
+                userCarrier = data.data[0].phones?.[0]?.carrier;
+                userCircle = data.data[0].addresses?.[0]?.city;
+            } else if (data && data.name) {
+                userName = data.name;
+                userCarrier = data.carrier || data.phones?.[0]?.carrier;
+                userCircle = data.circle || data.city;
+            } else if (data && data.data && data.data.name) {
+                userName = data.data.name;
+                userCarrier = data.data.carrier;
+                userCircle = data.data.circle || data.data.city;
+            }
+
+            // Data milne par Green Tick (Success) return hoga
+            if (userName || userCarrier) {
                 return res.status(200).json({
                     success: true,
-                    name: data.data.name || "Verified User",
-                    operator: data.data.carrier || "Not Found",
-                    circle: data.data.circle || "Not Found"
+                    name: userName || "Verified User",
+                    operator: userCarrier || "Not Found",
+                    circle: userCircle || "Not Found"
                 });
             } else {
-                return res.status(200).json({ success: false, message: "Number not found" });
+                // Agar sach mein data nahi mila toh wapas wahi Red Popup dikhega
+                return res.status(200).json({ success: false, message: "No data found" });
             }
+
         } catch (error) {
             console.error("API Error:", error);
             return res.status(500).json({ success: false, error: "Server Error Fetching Details" });
