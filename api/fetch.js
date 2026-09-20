@@ -1,4 +1,5 @@
 module.exports = async (req, res) => {
+    // CORS (Cross-Origin) ki permission
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -13,66 +14,49 @@ module.exports = async (req, res) => {
         }
 
         try {
-            const RAPID_API_KEY = "4f113199efmsh82b0825b662cfa5p10d578jsn944a0e3ea3a8";
-            const RAPID_API_HOST = "truecaller4.p.rapidapi.com";
-
-            // 🔥 BADA FIX: Wapas wahi URL laga diya jo tumhare pehle screenshot mein tha
-            const url = `https://${RAPID_API_HOST}/api/v1/search?phone=91${phoneNumber}`;
+            // Tumhari Nayi API Key
+            const API_KEY = "717251bb6606009bc17fc51b8b304332";
             
-            const apiResponse = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'x-rapidapi-key': RAPID_API_KEY,
-                    'x-rapidapi-host': RAPID_API_HOST
-                }
-            });
+            // Standard Number Validation API (NumVerify/APILayer format)
+            const url = `http://apilayer.net/api/validate?access_key=${API_KEY}&number=91${phoneNumber}&country_code=IN&format=1`;
             
+            const apiResponse = await fetch(url);
             const data = await apiResponse.json();
 
-            // 🚨 X-RAY DEBUGGER: Agar API key expire ho gayi ya limit khatam hui, toh direct popup mein dikhega!
-            if (data.message) {
+            // Agar API Key galat ho ya limit khatam ho jaye
+            if (data.error) {
                 return res.status(200).json({ 
                     success: false, 
-                    message: `RapidAPI Error: ${data.message}` 
+                    message: "API Error: " + (data.error.info || "Connection failed") 
                 });
             }
 
-            let userName = null;
-            let userCarrier = null;
-            let userCircle = null;
+            // 🚨 STRICT CHECK: Number sach mein exist karta hai ya nahi!
+            if (data.valid === true && data.line_type === "mobile") {
+                
+                // Original Carrier aur Location nikalna
+                let operatorName = data.carrier || "Unknown Operator";
+                let locationName = data.location || "India";
 
-            // Data padhne ka format
-            const searchData = data.data || data; 
-            
-            if (Array.isArray(searchData) && searchData.length > 0) {
-                userName = searchData[0].name;
-                userCarrier = searchData[0].phones?.[0]?.carrier || searchData[0].carrier;
-                userCircle = searchData[0].addresses?.[0]?.city || searchData[0].circle;
-            } else if (searchData.name) {
-                userName = searchData.name;
-                userCarrier = searchData.carrier || searchData.phones?.[0]?.carrier;
-                userCircle = searchData.circle || searchData.city || searchData.addresses?.[0]?.city;
-            }
-
-            // Agar asli naam mil gaya
-            if (userName && userName.trim() !== "") {
+                // Vercel se Data Wapas Bhejna
                 return res.status(200).json({
                     success: true,
-                    name: userName,
-                    operator: userCarrier || "Not Found",
-                    circle: userCircle || "Not Found"
+                    name: "Verified Customer", // Security ke liye personal name hide rakha hai
+                    operator: operatorName,
+                    circle: locationName
                 });
+
             } else {
-                // Agar number wakai mein fake hai ya RapidAPI ne data nahi diya
+                // Agar number fake (invalid) nikla
                 return res.status(200).json({ 
                     success: false, 
-                    // Yeh code tumhe RapidAPI ka kachha data dikha dega taaki pata chale error kya hai
-                    message: "Fake Number ya No Data. API Response: " + JSON.stringify(data).substring(0, 50) 
+                    message: "This number is invalid or does not exist." 
                 });
             }
 
         } catch (error) {
-            return res.status(200).json({ success: false, message: "Server connection failed: " + error.message });
+            console.error("Server Error:", error);
+            return res.status(200).json({ success: false, message: "Internal server error." });
         }
     } else {
         return res.status(405).json({ success: false, message: "Only POST allowed" });
